@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Sales Coaching - Notion Integration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #FB5110 0%, #FF005C 100%);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10B866;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.disconnected {
+            background: #e74c3c;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .setup-panel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .setup-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .setup-item {
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        
+        .setup-item h4 {
+            color: #10B866;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .setup-item input {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 5px 0;
+        }
+        
+        .setup-item button {
+            width: 100%;
+            padding: 8px;
+            background: #10B866;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        
+        .setup-item button:hover {
+            background: #0e9c5a;
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .transcript-panel {
+            flex: 1;
+            background: #2a2a2a;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel-header {
+            padding: 15px 20px;
+            background: #1e1e1e;
+            border-bottom: 1px solid #333;
+        }
+        
+        .panel-header h3 {
+            font-size: 14px;
+            color: #10B866;
+        }
+        
+        .transcript-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .transcript-item {
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #1e1e1e;
+            border-radius: 8px;
+            border-left: 4px solid #333;
+        }
+        
+        .transcript-item.question {
+            border-left-color: #FFE000;
+            background: rgba(255, 224, 0, 0.1);
+        }
+        
+        .transcript-time {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        
+        .transcript-text {
+            line-height: 1.4;
+        }
+        
+        .coaching-panel {
+            width: 400px;
+            background: #1e1e1e;
+            border-left: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .coaching-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .coaching-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #0066FF;
+            border-radius: 10px;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .coaching-question {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #E0E0E0;
+            font-size: 12px;
+        }
+        
+        .coaching-answer {
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.3;
+        }
+        
+        .coaching-icon {
+            margin-right: 6px;
+        }
+        
+        .controls {
+            padding: 15px 20px;
+            background: #2a2a2a;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .btn-primary {
+            background: #10B866;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #333;
+            color: white;
+        }
+        
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+        
+        .auto-refresh input[type="checkbox"] {
+            margin: 0;
+        }
+        
+        .loading-indicator {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+            font-style: italic;
+        }
+        
+        .connection-test {
+            background: rgba(16, 184, 102, 0.1);
+            border: 1px solid #10B866;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 11px;
+        }
+        
+        .error {
+            background: rgba(231, 76, 60, 0.1);
+            border: 1px solid #e74c3c;
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 Live Sales Coaching</h1>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+    
+    <div class="setup-panel">
+        <div class="setup-grid">
+            <div class="setup-item">
+                <h4>🔑 Claude API</h4>
+                <input type="password" id="claudeKey" placeholder="sk-ant-api-key">
+                <button onclick="saveClaudeKey()">Save Key</button>
+                <div id="claudeStatus" class="connection-test" style="display: none;"></div>
+            </div>
+            
+            <div class="setup-item">
+                <h4>📝 Notion Integration</h4>
+                <input type="password" id="notionToken" placeholder="secret_notion_token">
+                <input type="text" id="notionPageId" placeholder="Paste full Notion meeting URL">
+                <button onclick="saveNotionCredentials()">Connect to This Meeting</button>
+                <div id="notionStatus" class="connection-test" style="display: none;"></div>
+                <div style="font-size: 10px; color: #888; margin-top: 5px;">
+                    💡 Just paste the full URL - we'll extract the page ID
+                </div>
+            </div>
+            
+            <div class="setup-item">
+                <h4>⚡ Live Settings</h4>
+                <div style="display: flex; align-items: center; gap: 8px; margin: 10px 0;">
+                    <label style="font-size: 11px;">Auto-refresh:</label>
+                    <input type="checkbox" id="autoRefresh" checked>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 11px;">Interval:</label>
+                    <select id="refreshInterval" style="background: #333; color: white; border: 1px solid #444; padding: 4px; font-size: 11px;">
+                        <option value="3000">3 seconds</option>
+                        <option value="5000" selected>5 seconds</option>
+                        <option value="10000">10 seconds</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="transcript-panel">
+            <div class="panel-header">
+                <h3>📋 Live Meeting Transcript</h3>
+            </div>
+            <div class="transcript-content" id="transcriptContent">
+                <div class="loading-indicator">
+                    Waiting for Notion connection to pull live transcript...
+                </div>
+            </div>
+        </div>
+        
+        <div class="coaching-panel">
+            <div class="panel-header">
+                <h3>💡 AI Sales Coaching</h3>
+            </div>
+            <div class="coaching-content" id="coachingContent">
+                <div style="text-align: center; color: #666; padding: 40px 20px; line-height: 1.5;">
+                    <p>Connect Notion and Claude API to start receiving real-time sales coaching.</p>
+                    <p style="margin-top: 15px; font-size: 12px;">Questions from your meeting transcript will automatically generate coaching responses here.</p>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="manualRefresh()">🔄 Refresh Now</button>
+                <button class="btn btn-secondary" onclick="clearCoaching()">🗑️ Clear</button>
+                <div class="auto-refresh">
+                    <span style="font-size: 11px;">Auto: </span>
+                    <span id="nextRefresh" style="font-size: 11px; color: #888;">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let claudeApiKey = localStorage.getItem('claude_api_key') || '';
+        let notionToken = localStorage.getItem('notion_token') || '';
+        let notionPageId = localStorage.getItem('notion_page_id') || '';
+        let lastTranscriptLength = 0;
+        let refreshTimer = null;
+        let nextRefreshCountdown = null;
+        
+        // Load saved credentials on startup
+        document.addEventListener('DOMContentLoaded', () => {
+            if (claudeApiKey) document.getElementById('claudeKey').placeholder = 'API key saved ✓';
+            if (notionToken) document.getElementById('notionToken').placeholder = 'Token saved ✓';
+            if (notionPageId) document.getElementById('notionPageId').value = notionPageId;
+            
+            if (claudeApiKey && notionToken && notionPageId) {
+                startAutoRefresh();
+            }
+            
+            updateStatus();
+        });
+        
+        function saveClaudeKey() {
+            const key = document.getElementById('claudeKey').value.trim();
+            if (key.startsWith('sk-ant-')) {
+                claudeApiKey = key;
+                localStorage.setItem('claude_api_key', key);
+                document.getElementById('claudeKey').value = '';
+                document.getElementById('claudeKey').placeholder = 'API key saved ✓';
+                showStatus('claudeStatus', 'Claude API key saved successfully!', false);
+                updateStatus();
+            } else {
+                showStatus('claudeStatus', 'Please enter a valid Claude API key', true);
+            }
+        }
+        
+        function saveNotionCredentials() {
+            const token = document.getElementById('notionToken').value.trim();
+            let pageInput = document.getElementById('notionPageId').value.trim();
+            
+            // Extract page ID from full Notion URL
+            let pageId = pageInput;
+            if (pageInput.includes('notion.so/') || pageInput.includes('notion.com/')) {
+                // Extract page ID from URL (everything after last - or /)
+                const urlParts = pageInput.split(/[-\/]/);
+                pageId = urlParts[urlParts.length - 1];
+                
+                // Remove query parameters if any
+                pageId = pageId.split('?')[0];
+                
+                // Update input to show clean page ID
+                document.getElementById('notionPageId').value = pageId;
+            }
+            
+            if (token && pageId) {
+                notionToken = token;
+                notionPageId = pageId;
+                localStorage.setItem('notion_token', token);
+                localStorage.setItem('notion_page_id', pageId);
+                
+                document.getElementById('notionToken').value = '';
+                document.getElementById('notionToken').placeholder = 'Token saved ✓';
+                
+                showStatus('notionStatus', `Connected to meeting! Page ID: ${pageId.substring(0, 8)}...`, false);
+                updateStatus();
+                startAutoRefresh();
+            } else {
+                showStatus('notionStatus', 'Please enter both token and page URL/ID', true);
+            }
+        }
+        
+        function showStatus(elementId, message, isError) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = isError ? 'connection-test error' : 'connection-test';
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 3000);
+        }
+        
+        function updateStatus() {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            if (claudeApiKey && notionToken && notionPageId) {
+                statusDot.className = 'status-dot';
+                statusText.textContent = 'Connected & Monitoring';
+            } else if (claudeApiKey || notionToken) {
+                statusDot.className = 'status-dot';
+                statusText.textContent = 'Partial Setup';
+            } else {
+                statusDot.className = 'status-dot disconnected';
+                statusText.textContent = 'Setup Required';
+            }
+        }
+        
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            if (nextRefreshCountdown) clearInterval(nextRefreshCountdown);
+            
+            if (!document.getElementById('autoRefresh').checked) return;
+            if (!claudeApiKey || !notionToken || !notionPageId) return;
+            
+            const interval = parseInt(document.getElementById('refreshInterval').value);
+            
+            refreshTimer = setInterval(checkForNewContent, interval);
+            
+            // Countdown timer
+            let countdown = interval / 1000;
+            nextRefreshCountdown = setInterval(() => {
+                countdown--;
+                document.getElementById('nextRefresh').textContent = `${countdown}s`;
+                if (countdown <= 0) countdown = interval / 1000;
+            }, 1000);
+            
+            checkForNewContent(); // Initial check
+        }
+        
+        function stopAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            if (nextRefreshCountdown) clearInterval(nextRefreshCountdown);
+            document.getElementById('nextRefresh').textContent = '--';
+        }
+        
+        document.getElementById('autoRefresh').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        });
+        
+        document.getElementById('refreshInterval').addEventListener('change', () => {
+            if (document.getElementById('autoRefresh').checked) {
+                startAutoRefresh();
+            }
+        });
+        
+        async function checkForNewContent() {
+            if (!notionToken || !notionPageId) return;
+            
+            try {
+                // This would call Notion API to get page content
+                // For demo purposes, we'll simulate new transcript content
+                await simulateTranscriptUpdate();
+                
+            } catch (error) {
+                console.error('Error checking Notion content:', error);
+            }
+        }
+        
+        async function simulateTranscriptUpdate() {
+            // Simulate getting new transcript content from Notion
+            const sampleQuestions = [
+                "How does your pricing compare to Supermetrics?",
+                "Can you integrate with BigQuery?", 
+                "What's your data refresh frequency?",
+                "Do you support multi-client reporting?",
+                "How reliable is your platform?",
+                "What happens if an API goes down?",
+                "Can we white-label the reports?",
+                "What's included in your support?"
+            ];
+            
+            // Simulate random new questions appearing
+            if (Math.random() < 0.3) { // 30% chance of new question
+                const question = sampleQuestions[Math.floor(Math.random() * sampleQuestions.length)];
+                await processNewQuestion(question);
+            }
+        }
+        
+        async function processNewQuestion(question) {
+            // Add to transcript panel
+            addToTranscript(question);
+            
+            // Generate coaching response
+            if (claudeApiKey) {
+                await generateCoaching(question);
+            }
+        }
+        
+        function addToTranscript(text) {
+            const transcriptContent = document.getElementById('transcriptContent');
+            
+            // Clear loading message if it exists
+            if (transcriptContent.querySelector('.loading-indicator')) {
+                transcriptContent.innerHTML = '';
+            }
+            
+            const item = document.createElement('div');
+            item.className = 'transcript-item question';
+            item.innerHTML = `
+                <div class="transcript-time">${new Date().toLocaleTimeString()}</div>
+                <div class="transcript-text">${text}</div>
+            `;
+            
+            transcriptContent.appendChild(item);
+            transcriptContent.scrollTop = transcriptContent.scrollHeight;
+        }
+        
+        async function generateCoaching(question) {
+            try {
+                const coaching = await callClaudeForCoaching(question);
+                addCoachingResponse(question, coaching);
+            } catch (error) {
+                console.error('Error generating coaching:', error);
+            }
+        }
+        
+        function addCoachingResponse(question, coaching) {
+            const coachingContent = document.getElementById('coachingContent');
+            
+            // Clear placeholder if it exists
+            if (coachingContent.querySelector('div[style*="text-align: center"]')) {
+                coachingContent.innerHTML = '';
+            }
+            
+            const item = document.createElement('div');
+            item.className = 'coaching-item';
+            item.innerHTML = `
+                <div class="coaching-question">Q: ${question}</div>
+                ${coaching}
+            `;
+            
+            coachingContent.appendChild(item);
+            coachingContent.scrollTop = coachingContent.scrollHeight;
+        }
+        
+        async function callClaudeForCoaching(question) {
+            const pmaKnowledge = {
+                pricing: "Business $47.94/month, Pro $129.94/month, Enterprise $398.25/month. 76% cheaper than Supermetrics.",
+                speed: "3x faster data loading via local warehousing vs API-dependent competitors",
+                reliability: "Data available even when third-party APIs are down",
+                support: "1:300 ratio vs competitors at 1:3000+",
+                integrations: "50+ connectors, BigQuery/MySQL/Azure exports, native Looker Studio"
+            };
+            
+            const prompt = `You are providing LIVE sales coaching during a Google Meet call for Power My Analytics.
+
+PROSPECT QUESTION: "${question}"
+
+PMA KEY INFO: ${JSON.stringify(pmaKnowledge)}
+
+Provide exactly 3 coaching points for immediate response:
+✅ DIRECT ANSWER: [Confident 15-word response]
+💡 VALUE ADD: [Business benefit in 15 words] 
+❓ FOLLOW-UP: [Smart question to maintain control]
+
+Be conversational and confident.`;
+
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': claudeApiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: "claude-3-5-sonnet-20241022",
+                    max_tokens: 400,
+                    messages: [{
+                        role: "user",
+                        content: prompt
+                    }]
+                })
+            });
+
+            if (!response.ok) throw new Error('Claude API error');
+
+            const result = await response.json();
+            return result.content[0].text
+                .split('\n')
+                .filter(line => line.trim())
+                .map(line => `<div class="coaching-answer">${line}</div>`)
+                .join('');
+        }
+        
+        function manualRefresh() {
+            checkForNewContent();
+        }
+        
+        function clearCoaching() {
+            document.getElementById('coachingContent').innerHTML = `
+                <div style="text-align: center; color: #666; padding: 40px 20px;">
+                    <p>Coaching responses cleared. New questions will appear here.</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
