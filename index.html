@@ -83,7 +83,7 @@
             font-size: 14px;
         }
         
-        .setup-item input {
+        .setup-item input, .setup-item select {
             width: 100%;
             padding: 8px;
             background: #333;
@@ -151,6 +151,17 @@
         .transcript-item.question {
             border-left-color: #FFE000;
             background: rgba(255, 224, 0, 0.1);
+        }
+        
+        .transcript-item.new {
+            border-left-color: #10B866;
+            background: rgba(16, 184, 102, 0.1);
+            animation: highlight 2s ease;
+        }
+        
+        @keyframes highlight {
+            from { background: rgba(16, 184, 102, 0.3); }
+            to { background: rgba(16, 184, 102, 0.1); }
         }
         
         .transcript-time {
@@ -266,6 +277,29 @@
             border: 1px solid #e74c3c;
             color: #e74c3c;
         }
+        
+        .debug-panel {
+            background: #2a2a2a;
+            padding: 10px 20px;
+            border-top: 1px solid #333;
+            font-size: 11px;
+            color: #888;
+        }
+        
+        .debug-info {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .debug-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .debug-label {
+            color: #10B866;
+            margin-bottom: 3px;
+        }
     </style>
 </head>
 <body>
@@ -289,12 +323,10 @@
             <div class="setup-item">
                 <h4>📝 Notion Integration</h4>
                 <input type="password" id="notionToken" placeholder="secret_notion_token">
-                <input type="text" id="notionPageId" placeholder="Paste full Notion meeting URL">
-                <button onclick="saveNotionCredentials()">Connect to This Meeting</button>
+                <input type="text" id="notionPageId" placeholder="Notion page ID or URL">
+                <button onclick="saveNotionCredentials()">Connect to Page</button>
+                <button onclick="testNotionConnection()" style="background: #0066FF; margin-top: 5px;">Test Connection</button>
                 <div id="notionStatus" class="connection-test" style="display: none;"></div>
-                <div style="font-size: 10px; color: #888; margin-top: 5px;">
-                    💡 Just paste the full URL - we'll extract the page ID
-                </div>
             </div>
             
             <div class="setup-item">
@@ -305,10 +337,11 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-size: 11px;">Interval:</label>
-                    <select id="refreshInterval" style="background: #333; color: white; border: 1px solid #444; padding: 4px; font-size: 11px;">
+                    <select id="refreshInterval">
                         <option value="3000">3 seconds</option>
                         <option value="5000" selected>5 seconds</option>
                         <option value="10000">10 seconds</option>
+                        <option value="30000">30 seconds</option>
                     </select>
                 </div>
             </div>
@@ -349,11 +382,33 @@
         </div>
     </div>
 
+    <div class="debug-panel">
+        <div class="debug-info">
+            <div class="debug-item">
+                <div class="debug-label">Last Check:</div>
+                <div id="lastCheck">Never</div>
+            </div>
+            <div class="debug-item">
+                <div class="debug-label">Content Length:</div>
+                <div id="contentLength">0</div>
+            </div>
+            <div class="debug-item">
+                <div class="debug-label">Questions Found:</div>
+                <div id="questionsFound">0</div>
+            </div>
+            <div class="debug-item">
+                <div class="debug-label">API Status:</div>
+                <div id="apiStatus">Not connected</div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let claudeApiKey = localStorage.getItem('claude_api_key') || '';
         let notionToken = localStorage.getItem('notion_token') || '';
         let notionPageId = localStorage.getItem('notion_page_id') || '';
-        let lastTranscriptLength = 0;
+        let lastTranscriptContent = '';
+        let processedQuestions = new Set();
         let refreshTimer = null;
         let nextRefreshCountdown = null;
         
@@ -389,18 +444,7 @@
             let pageInput = document.getElementById('notionPageId').value.trim();
             
             // Extract page ID from full Notion URL
-            let pageId = pageInput;
-            if (pageInput.includes('notion.so/') || pageInput.includes('notion.com/')) {
-                // Extract page ID from URL (everything after last - or /)
-                const urlParts = pageInput.split(/[-\/]/);
-                pageId = urlParts[urlParts.length - 1];
-                
-                // Remove query parameters if any
-                pageId = pageId.split('?')[0];
-                
-                // Update input to show clean page ID
-                document.getElementById('notionPageId').value = pageId;
-            }
+            let pageId = extractPageId(pageInput);
             
             if (token && pageId) {
                 notionToken = token;
@@ -410,12 +454,71 @@
                 
                 document.getElementById('notionToken').value = '';
                 document.getElementById('notionToken').placeholder = 'Token saved ✓';
+                document.getElementById('notionPageId').value = pageId;
                 
-                showStatus('notionStatus', `Connected to meeting! Page ID: ${pageId.substring(0, 8)}...`, false);
+                showStatus('notionStatus', `Connected to page! ID: ${pageId.substring(0, 8)}...`, false);
                 updateStatus();
                 startAutoRefresh();
             } else {
                 showStatus('notionStatus', 'Please enter both token and page URL/ID', true);
+            }
+        }
+        
+        function extractPageId(input) {
+            if (!input) return '';
+            
+            // If it's already a clean page ID (32 chars, alphanumeric + dashes)
+            if (/^[a-zA-Z0-9-]{32}$/.test(input.replace(/-/g, ''))) {
+                return input.replace(/-/g, '');
+            }
+            
+            // Extract from URL patterns
+            const patterns = [
+                /([a-f0-9]{32})$/,  // End of URL
+                /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/,  // UUID format
+                /([a-f0-9]{32})/    // 32 character hex
+            ];
+            
+            for (const pattern of patterns) {
+                const match = input.match(pattern);
+                if (match) {
+                    return match[1].replace(/-/g, '');
+                }
+            }
+            
+            return input; // Return as-is if no pattern matches
+        }
+        
+        async function testNotionConnection() {
+            if (!notionToken || !notionPageId) {
+                showStatus('notionStatus', 'Please save credentials first', true);
+                return;
+            }
+            
+            try {
+                showStatus('notionStatus', 'Testing connection...', false);
+                
+                const response = await fetch(`https://api.notion.com/v1/pages/${notionPageId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${notionToken}`,
+                        'Notion-Version': '2022-06-28',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus('notionStatus', `✓ Connected! Page: ${data.properties.title?.title[0]?.plain_text || 'Untitled'}`, false);
+                    document.getElementById('apiStatus').textContent = 'Connected';
+                } else {
+                    const error = await response.json();
+                    showStatus('notionStatus', `❌ Error: ${error.message || response.statusText}`, true);
+                    document.getElementById('apiStatus').textContent = 'Connection failed';
+                }
+            } catch (error) {
+                showStatus('notionStatus', `❌ Connection error: ${error.message}`, true);
+                document.getElementById('apiStatus').textContent = 'Connection error';
             }
         }
         
@@ -426,7 +529,7 @@
             element.style.display = 'block';
             
             setTimeout(() => {
-                element.style.display = 'none';
+                if (!isError) element.style.display = 'none';
             }, 3000);
         }
         
@@ -492,33 +595,88 @@
             if (!notionToken || !notionPageId) return;
             
             try {
-                // This would call Notion API to get page content
-                // For demo purposes, we'll simulate new transcript content
-                await simulateTranscriptUpdate();
+                document.getElementById('lastCheck').textContent = new Date().toLocaleTimeString();
+                
+                // Get page content from Notion
+                const blocks = await getNotionPageBlocks();
+                const content = extractTextFromBlocks(blocks);
+                
+                document.getElementById('contentLength').textContent = content.length;
+                
+                // Check for new questions
+                const questions = findQuestions(content);
+                document.getElementById('questionsFound').textContent = questions.length;
+                
+                // Process new questions
+                for (const question of questions) {
+                    if (!processedQuestions.has(question)) {
+                        processedQuestions.add(question);
+                        await processNewQuestion(question);
+                    }
+                }
+                
+                lastTranscriptContent = content;
                 
             } catch (error) {
                 console.error('Error checking Notion content:', error);
+                document.getElementById('apiStatus').textContent = `Error: ${error.message}`;
             }
         }
         
-        async function simulateTranscriptUpdate() {
-            // Simulate getting new transcript content from Notion
-            const sampleQuestions = [
-                "How does your pricing compare to Supermetrics?",
-                "Can you integrate with BigQuery?", 
-                "What's your data refresh frequency?",
-                "Do you support multi-client reporting?",
-                "How reliable is your platform?",
-                "What happens if an API goes down?",
-                "Can we white-label the reports?",
-                "What's included in your support?"
-            ];
+        async function getNotionPageBlocks() {
+            const response = await fetch(`https://api.notion.com/v1/blocks/${notionPageId}/children`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${notionToken}`,
+                    'Notion-Version': '2022-06-28'
+                }
+            });
             
-            // Simulate random new questions appearing
-            if (Math.random() < 0.3) { // 30% chance of new question
-                const question = sampleQuestions[Math.floor(Math.random() * sampleQuestions.length)];
-                await processNewQuestion(question);
+            if (!response.ok) {
+                throw new Error(`Notion API error: ${response.statusText}`);
             }
+            
+            const data = await response.json();
+            return data.results;
+        }
+        
+        function extractTextFromBlocks(blocks) {
+            let text = '';
+            for (const block of blocks) {
+                if (block.type === 'paragraph' && block.paragraph?.rich_text) {
+                    for (const richText of block.paragraph.rich_text) {
+                        text += richText.plain_text + ' ';
+                    }
+                    text += '\n';
+                } else if (block.type === 'bulleted_list_item' && block.bulleted_list_item?.rich_text) {
+                    for (const richText of block.bulleted_list_item.rich_text) {
+                        text += '• ' + richText.plain_text + ' ';
+                    }
+                    text += '\n';
+                }
+            }
+            return text;
+        }
+        
+        function findQuestions(content) {
+            // Look for question patterns
+            const lines = content.split('\n');
+            const questions = [];
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.length > 10 && (
+                    trimmed.endsWith('?') || 
+                    trimmed.toLowerCase().includes('how') ||
+                    trimmed.toLowerCase().includes('what') ||
+                    trimmed.toLowerCase().includes('can you') ||
+                    trimmed.toLowerCase().includes('do you')
+                )) {
+                    questions.push(trimmed);
+                }
+            }
+            
+            return questions;
         }
         
         async function processNewQuestion(question) {
@@ -540,7 +698,7 @@
             }
             
             const item = document.createElement('div');
-            item.className = 'transcript-item question';
+            item.className = 'transcript-item new';
             item.innerHTML = `
                 <div class="transcript-time">${new Date().toLocaleTimeString()}</div>
                 <div class="transcript-text">${text}</div>
@@ -582,23 +740,25 @@
             const pmaKnowledge = {
                 pricing: "Business $47.94/month, Pro $129.94/month, Enterprise $398.25/month. 76% cheaper than Supermetrics.",
                 speed: "3x faster data loading via local warehousing vs API-dependent competitors",
-                reliability: "Data available even when third-party APIs are down",
-                support: "1:300 ratio vs competitors at 1:3000+",
-                integrations: "50+ connectors, BigQuery/MySQL/Azure exports, native Looker Studio"
+                reliability: "Data available even when third-party APIs are down via local warehousing",
+                support: "1:300 customer ratio vs competitors at 1:3000+. Human experts, not chatbots.",
+                integrations: "50+ connectors, BigQuery/MySQL/Azure exports, native Looker Studio",
+                differentiators: "Only platform with local data warehousing. Spark AI launching Q2 2025."
             };
             
-            const prompt = `You are providing LIVE sales coaching during a Google Meet call for Power My Analytics.
+            const prompt = `You are providing LIVE sales coaching for a Power My Analytics sales call.
 
 PROSPECT QUESTION: "${question}"
 
-PMA KEY INFO: ${JSON.stringify(pmaKnowledge)}
+PMA COMPETITIVE ADVANTAGES: ${JSON.stringify(pmaKnowledge)}
 
 Provide exactly 3 coaching points for immediate response:
-✅ DIRECT ANSWER: [Confident 15-word response]
-💡 VALUE ADD: [Business benefit in 15 words] 
-❓ FOLLOW-UP: [Smart question to maintain control]
 
-Be conversational and confident.`;
+✅ DIRECT ANSWER: [Confident response in 15 words or less]
+💡 VALUE ADD: [Business benefit in 15 words or less] 
+❓ FOLLOW-UP: [Smart question to maintain control in 15 words or less]
+
+Be conversational, confident, and focus on PMA's unique advantages.`;
 
             const response = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
@@ -637,6 +797,7 @@ Be conversational and confident.`;
                     <p>Coaching responses cleared. New questions will appear here.</p>
                 </div>
             `;
+            processedQuestions.clear();
         }
     </script>
 </body>
