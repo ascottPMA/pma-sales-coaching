@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Sales Coaching - Notion Integration</title>
+    <title>Live Sales Coaching - Fireflies Integration</title>
     <style>
         * {
             margin: 0;
@@ -110,6 +110,14 @@
             background: #0e9c5a;
         }
         
+        .setup-item button.secondary {
+            background: #0066FF;
+        }
+        
+        .setup-item button.secondary:hover {
+            background: #0052cc;
+        }
+        
         .main-content {
             display: flex;
             flex: 1;
@@ -127,11 +135,19 @@
             padding: 15px 20px;
             background: #1e1e1e;
             border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         .panel-header h3 {
             font-size: 14px;
             color: #10B866;
+        }
+        
+        .meeting-info {
+            font-size: 11px;
+            color: #888;
         }
         
         .transcript-content {
@@ -159,6 +175,11 @@
             animation: highlight 2s ease;
         }
         
+        .transcript-item.speaker {
+            border-left-color: #0066FF;
+            background: rgba(0, 102, 255, 0.1);
+        }
+        
         @keyframes highlight {
             from { background: rgba(16, 184, 102, 0.3); }
             to { background: rgba(16, 184, 102, 0.1); }
@@ -167,6 +188,13 @@
         .transcript-time {
             font-size: 11px;
             color: #888;
+            margin-bottom: 5px;
+        }
+        
+        .transcript-speaker {
+            font-size: 11px;
+            color: #10B866;
+            font-weight: 600;
             margin-bottom: 5px;
         }
         
@@ -212,10 +240,6 @@
             margin-bottom: 8px;
             font-size: 13px;
             line-height: 1.3;
-        }
-        
-        .coaching-icon {
-            margin-right: 6px;
         }
         
         .controls {
@@ -300,11 +324,40 @@
             color: #10B866;
             margin-bottom: 3px;
         }
+        
+        .meeting-selector {
+            max-height: 150px;
+            overflow-y: auto;
+            background: #333;
+            border: 1px solid #444;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .meeting-option {
+            padding: 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #444;
+            font-size: 11px;
+        }
+        
+        .meeting-option:hover {
+            background: #444;
+        }
+        
+        .meeting-option.selected {
+            background: #10B866;
+        }
+        
+        .meeting-date {
+            color: #888;
+            font-size: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🤖 Live Sales Coaching</h1>
+        <h1>🔥 Live Sales Coaching - Fireflies AI</h1>
         <div class="status">
             <div class="status-dot" id="statusDot"></div>
             <span id="statusText">Connecting...</span>
@@ -314,19 +367,20 @@
     <div class="setup-panel">
         <div class="setup-grid">
             <div class="setup-item">
-                <h4>🔑 Claude API</h4>
-                <input type="password" id="claudeKey" placeholder="sk-ant-api-key">
-                <button onclick="saveClaudeKey()">Save Key</button>
-                <div id="claudeStatus" class="connection-test" style="display: none;"></div>
+                <h4>🔑 API Keys</h4>
+                <input type="password" id="claudeKey" placeholder="Claude API key (sk-ant-...)">
+                <input type="password" id="firefliesKey" placeholder="Fireflies API key">
+                <button onclick="saveApiKeys()">Save Keys</button>
+                <div id="apiStatus" class="connection-test" style="display: none;"></div>
             </div>
             
             <div class="setup-item">
-                <h4>📝 Notion Integration</h4>
-                <input type="password" id="notionToken" placeholder="secret_notion_token">
-                <input type="text" id="notionPageId" placeholder="Notion page ID or URL">
-                <button onclick="saveNotionCredentials()">Connect to Page</button>
-                <button onclick="testNotionConnection()" style="background: #0066FF; margin-top: 5px;">Test Connection</button>
-                <div id="notionStatus" class="connection-test" style="display: none;"></div>
+                <h4>🔥 Meeting Selection</h4>
+                <button onclick="loadMeetings()" class="secondary">Load Recent Meetings</button>
+                <div id="meetingSelector" class="meeting-selector" style="display: none;"></div>
+                <input type="text" id="meetingId" placeholder="Or paste meeting ID directly">
+                <button onclick="connectToMeeting()">Connect to Meeting</button>
+                <div id="firefliesStatus" class="connection-test" style="display: none;"></div>
             </div>
             
             <div class="setup-item">
@@ -335,14 +389,18 @@
                     <label style="font-size: 11px;">Auto-refresh:</label>
                     <input type="checkbox" id="autoRefresh" checked>
                 </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin: 10px 0;">
                     <label style="font-size: 11px;">Interval:</label>
                     <select id="refreshInterval">
-                        <option value="3000">3 seconds</option>
-                        <option value="5000" selected>5 seconds</option>
-                        <option value="10000">10 seconds</option>
+                        <option value="5000">5 seconds</option>
+                        <option value="10000" selected>10 seconds</option>
+                        <option value="15000">15 seconds</option>
                         <option value="30000">30 seconds</option>
                     </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 11px;">Question detection:</label>
+                    <input type="checkbox" id="autoQuestions" checked>
                 </div>
             </div>
         </div>
@@ -352,10 +410,11 @@
         <div class="transcript-panel">
             <div class="panel-header">
                 <h3>📋 Live Meeting Transcript</h3>
+                <div class="meeting-info" id="meetingInfo">No meeting connected</div>
             </div>
             <div class="transcript-content" id="transcriptContent">
                 <div class="loading-indicator">
-                    Waiting for Notion connection to pull live transcript...
+                    Connect to a Fireflies meeting to start receiving live transcript...
                 </div>
             </div>
         </div>
@@ -366,8 +425,8 @@
             </div>
             <div class="coaching-content" id="coachingContent">
                 <div style="text-align: center; color: #666; padding: 40px 20px; line-height: 1.5;">
-                    <p>Connect Notion and Claude API to start receiving real-time sales coaching.</p>
-                    <p style="margin-top: 15px; font-size: 12px;">Questions from your meeting transcript will automatically generate coaching responses here.</p>
+                    <p>Connect to a meeting and enable Claude API to start receiving real-time sales coaching.</p>
+                    <p style="margin-top: 15px; font-size: 12px;">Questions detected from the transcript will automatically generate coaching responses here.</p>
                 </div>
             </div>
             
@@ -375,7 +434,7 @@
                 <button class="btn btn-primary" onclick="manualRefresh()">🔄 Refresh Now</button>
                 <button class="btn btn-secondary" onclick="clearCoaching()">🗑️ Clear</button>
                 <div class="auto-refresh">
-                    <span style="font-size: 11px;">Auto: </span>
+                    <span style="font-size: 11px;">Next: </span>
                     <span id="nextRefresh" style="font-size: 11px; color: #888;">--</span>
                 </div>
             </div>
@@ -389,137 +448,190 @@
                 <div id="lastCheck">Never</div>
             </div>
             <div class="debug-item">
-                <div class="debug-label">Content Length:</div>
-                <div id="contentLength">0</div>
+                <div class="debug-label">Transcript Length:</div>
+                <div id="transcriptLength">0</div>
             </div>
             <div class="debug-item">
                 <div class="debug-label">Questions Found:</div>
                 <div id="questionsFound">0</div>
             </div>
             <div class="debug-item">
-                <div class="debug-label">API Status:</div>
-                <div id="apiStatus">Not connected</div>
+                <div class="debug-label">Meeting Status:</div>
+                <div id="meetingStatus">Not connected</div>
+            </div>
+            <div class="debug-item">
+                <div class="debug-label">Duration:</div>
+                <div id="meetingDuration">--</div>
             </div>
         </div>
     </div>
 
     <script>
         let claudeApiKey = localStorage.getItem('claude_api_key') || '';
-        let notionToken = localStorage.getItem('notion_token') || '';
-        let notionPageId = localStorage.getItem('notion_page_id') || '';
-        let lastTranscriptContent = '';
+        let firefliesApiKey = localStorage.getItem('fireflies_api_key') || '';
+        let currentMeetingId = localStorage.getItem('current_meeting_id') || '';
+        let lastTranscriptId = '';
         let processedQuestions = new Set();
         let refreshTimer = null;
         let nextRefreshCountdown = null;
         
         // Load saved credentials on startup
         document.addEventListener('DOMContentLoaded', () => {
-            if (claudeApiKey) document.getElementById('claudeKey').placeholder = 'API key saved ✓';
-            if (notionToken) document.getElementById('notionToken').placeholder = 'Token saved ✓';
-            if (notionPageId) document.getElementById('notionPageId').value = notionPageId;
+            if (claudeApiKey) document.getElementById('claudeKey').placeholder = 'Claude API key saved ✓';
+            if (firefliesApiKey) document.getElementById('firefliesKey').placeholder = 'Fireflies API key saved ✓';
+            if (currentMeetingId) document.getElementById('meetingId').value = currentMeetingId;
             
-            if (claudeApiKey && notionToken && notionPageId) {
+            if (claudeApiKey && firefliesApiKey && currentMeetingId) {
                 startAutoRefresh();
             }
             
             updateStatus();
         });
         
-        function saveClaudeKey() {
-            const key = document.getElementById('claudeKey').value.trim();
-            if (key.startsWith('sk-ant-')) {
-                claudeApiKey = key;
-                localStorage.setItem('claude_api_key', key);
+        function saveApiKeys() {
+            const claudeKey = document.getElementById('claudeKey').value.trim();
+            const firefliesKey = document.getElementById('firefliesKey').value.trim();
+            
+            let saved = false;
+            
+            if (claudeKey && claudeKey.startsWith('sk-ant-')) {
+                claudeApiKey = claudeKey;
+                localStorage.setItem('claude_api_key', claudeKey);
                 document.getElementById('claudeKey').value = '';
-                document.getElementById('claudeKey').placeholder = 'API key saved ✓';
-                showStatus('claudeStatus', 'Claude API key saved successfully!', false);
+                document.getElementById('claudeKey').placeholder = 'Claude API key saved ✓';
+                saved = true;
+            }
+            
+            if (firefliesKey) {
+                firefliesApiKey = firefliesKey;
+                localStorage.setItem('fireflies_api_key', firefliesKey);
+                document.getElementById('firefliesKey').value = '';
+                document.getElementById('firefliesKey').placeholder = 'Fireflies API key saved ✓';
+                saved = true;
+            }
+            
+            if (saved) {
+                showStatus('apiStatus', 'API keys saved successfully!', false);
                 updateStatus();
             } else {
-                showStatus('claudeStatus', 'Please enter a valid Claude API key', true);
+                showStatus('apiStatus', 'Please enter valid API keys', true);
             }
         }
         
-        function saveNotionCredentials() {
-            const token = document.getElementById('notionToken').value.trim();
-            let pageInput = document.getElementById('notionPageId').value.trim();
-            
-            // Extract page ID from full Notion URL
-            let pageId = extractPageId(pageInput);
-            
-            if (token && pageId) {
-                notionToken = token;
-                notionPageId = pageId;
-                localStorage.setItem('notion_token', token);
-                localStorage.setItem('notion_page_id', pageId);
-                
-                document.getElementById('notionToken').value = '';
-                document.getElementById('notionToken').placeholder = 'Token saved ✓';
-                document.getElementById('notionPageId').value = pageId;
-                
-                showStatus('notionStatus', `Connected to page! ID: ${pageId.substring(0, 8)}...`, false);
-                updateStatus();
-                startAutoRefresh();
-            } else {
-                showStatus('notionStatus', 'Please enter both token and page URL/ID', true);
-            }
-        }
-        
-        function extractPageId(input) {
-            if (!input) return '';
-            
-            // If it's already a clean page ID (32 chars, alphanumeric + dashes)
-            if (/^[a-zA-Z0-9-]{32}$/.test(input.replace(/-/g, ''))) {
-                return input.replace(/-/g, '');
-            }
-            
-            // Extract from URL patterns
-            const patterns = [
-                /([a-f0-9]{32})$/,  // End of URL
-                /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/,  // UUID format
-                /([a-f0-9]{32})/    // 32 character hex
-            ];
-            
-            for (const pattern of patterns) {
-                const match = input.match(pattern);
-                if (match) {
-                    return match[1].replace(/-/g, '');
-                }
-            }
-            
-            return input; // Return as-is if no pattern matches
-        }
-        
-        async function testNotionConnection() {
-            if (!notionToken || !notionPageId) {
-                showStatus('notionStatus', 'Please save credentials first', true);
+        async function loadMeetings() {
+            if (!firefliesApiKey) {
+                showStatus('firefliesStatus', 'Please save Fireflies API key first', true);
                 return;
             }
             
+            showStatus('firefliesStatus', 'Loading recent meetings...', false);
+            
             try {
-                showStatus('notionStatus', 'Testing connection...', false);
-                
-                const response = await fetch(`https://api.notion.com/v1/pages/${notionPageId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${notionToken}`,
-                        'Notion-Version': '2022-06-28',
-                        'Content-Type': 'application/json'
+                const response = await callFirefliesAPI(`
+                    query GetMeetings($limit: Int) {
+                        transcripts(limit: $limit, orderBy: date, orderDir: desc) {
+                            id
+                            title
+                            date
+                            duration
+                            meeting_attendees {
+                                displayName
+                            }
+                        }
                     }
-                });
+                `, { limit: 10 });
                 
-                if (response.ok) {
-                    const data = await response.json();
-                    showStatus('notionStatus', `✓ Connected! Page: ${data.properties.title?.title[0]?.plain_text || 'Untitled'}`, false);
-                    document.getElementById('apiStatus').textContent = 'Connected';
+                if (response.data && response.data.transcripts) {
+                    displayMeetings(response.data.transcripts);
+                    showStatus('firefliesStatus', `✓ Loaded ${response.data.transcripts.length} recent meetings`, false);
                 } else {
-                    const error = await response.json();
-                    showStatus('notionStatus', `❌ Error: ${error.message || response.statusText}`, true);
-                    document.getElementById('apiStatus').textContent = 'Connection failed';
+                    showStatus('firefliesStatus', '❌ No meetings found', true);
                 }
             } catch (error) {
-                showStatus('notionStatus', `❌ Connection error: ${error.message}`, true);
-                document.getElementById('apiStatus').textContent = 'Connection error';
+                console.error('Error loading meetings:', error);
+                showStatus('firefliesStatus', `❌ Error: ${error.message}`, true);
             }
+        }
+        
+        function displayMeetings(meetings) {
+            const selector = document.getElementById('meetingSelector');
+            selector.innerHTML = '';
+            selector.style.display = 'block';
+            
+            meetings.forEach(meeting => {
+                const option = document.createElement('div');
+                option.className = 'meeting-option';
+                option.dataset.meetingId = meeting.id;
+                
+                const attendees = meeting.meeting_attendees?.map(a => a.displayName).join(', ') || 'Unknown';
+                const date = new Date(meeting.date).toLocaleDateString();
+                const duration = Math.round(meeting.duration / 60) || 0;
+                
+                option.innerHTML = `
+                    <div><strong>${meeting.title}</strong></div>
+                    <div class="meeting-date">${date} • ${duration}min • ${attendees}</div>
+                `;
+                
+                option.addEventListener('click', () => {
+                    // Clear previous selection
+                    selector.querySelectorAll('.meeting-option').forEach(o => o.classList.remove('selected'));
+                    option.classList.add('selected');
+                    
+                    // Set meeting ID
+                    document.getElementById('meetingId').value = meeting.id;
+                });
+                
+                selector.appendChild(option);
+            });
+        }
+        
+        function connectToMeeting() {
+            const meetingId = document.getElementById('meetingId').value.trim();
+            
+            if (!meetingId) {
+                showStatus('firefliesStatus', 'Please select a meeting or enter meeting ID', true);
+                return;
+            }
+            
+            currentMeetingId = meetingId;
+            localStorage.setItem('current_meeting_id', meetingId);
+            
+            // Reset tracking
+            lastTranscriptId = '';
+            processedQuestions.clear();
+            
+            // Update UI
+            document.getElementById('meetingInfo').textContent = `Connected: ${meetingId.substring(0, 8)}...`;
+            showStatus('firefliesStatus', `✓ Connected to meeting: ${meetingId.substring(0, 8)}...`, false);
+            
+            updateStatus();
+            startAutoRefresh();
+        }
+        
+        async function callFirefliesAPI(query, variables = {}) {
+            const response = await fetch('https://api.fireflies.ai/graphql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${firefliesApiKey}`
+                },
+                body: JSON.stringify({
+                    query: query,
+                    variables: variables
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Fireflies API error: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.errors) {
+                throw new Error(`GraphQL error: ${data.errors[0].message}`);
+            }
+            
+            return data;
         }
         
         function showStatus(elementId, message, isError) {
@@ -537,10 +649,10 @@
             const statusDot = document.getElementById('statusDot');
             const statusText = document.getElementById('statusText');
             
-            if (claudeApiKey && notionToken && notionPageId) {
+            if (claudeApiKey && firefliesApiKey && currentMeetingId) {
                 statusDot.className = 'status-dot';
                 statusText.textContent = 'Connected & Monitoring';
-            } else if (claudeApiKey || notionToken) {
+            } else if (claudeApiKey || firefliesApiKey) {
                 statusDot.className = 'status-dot';
                 statusText.textContent = 'Partial Setup';
             } else {
@@ -554,11 +666,11 @@
             if (nextRefreshCountdown) clearInterval(nextRefreshCountdown);
             
             if (!document.getElementById('autoRefresh').checked) return;
-            if (!claudeApiKey || !notionToken || !notionPageId) return;
+            if (!claudeApiKey || !firefliesApiKey || !currentMeetingId) return;
             
             const interval = parseInt(document.getElementById('refreshInterval').value);
             
-            refreshTimer = setInterval(checkForNewContent, interval);
+            refreshTimer = setInterval(checkForNewTranscript, interval);
             
             // Countdown timer
             let countdown = interval / 1000;
@@ -568,7 +680,7 @@
                 if (countdown <= 0) countdown = interval / 1000;
             }, 1000);
             
-            checkForNewContent(); // Initial check
+            checkForNewTranscript(); // Initial check
         }
         
         function stopAutoRefresh() {
@@ -591,105 +703,75 @@
             }
         });
         
-        async function checkForNewContent() {
-            if (!notionToken || !notionPageId) return;
+        async function checkForNewTranscript() {
+            if (!firefliesApiKey || !currentMeetingId) return;
             
             try {
                 document.getElementById('lastCheck').textContent = new Date().toLocaleTimeString();
                 
-                // Get page content from Notion
-                const blocks = await getNotionPageBlocks();
-                const content = extractTextFromBlocks(blocks);
-                
-                document.getElementById('contentLength').textContent = content.length;
-                
-                // Check for new questions
-                const questions = findQuestions(content);
-                document.getElementById('questionsFound').textContent = questions.length;
-                
-                // Process new questions
-                for (const question of questions) {
-                    if (!processedQuestions.has(question)) {
-                        processedQuestions.add(question);
-                        await processNewQuestion(question);
+                // Get meeting transcript from Fireflies
+                const response = await callFirefliesAPI(`
+                    query GetTranscript($transcriptId: String!) {
+                        transcript(id: $transcriptId) {
+                            id
+                            title
+                            date
+                            duration
+                            sentences {
+                                text
+                                speaker_name
+                                start_time
+                            }
+                        }
                     }
-                }
+                `, { transcriptId: currentMeetingId });
                 
-                lastTranscriptContent = content;
+                if (response.data && response.data.transcript) {
+                    processTranscript(response.data.transcript);
+                } else {
+                    document.getElementById('meetingStatus').textContent = 'Meeting not found';
+                }
                 
             } catch (error) {
-                console.error('Error checking Notion content:', error);
-                document.getElementById('apiStatus').textContent = `Error: ${error.message}`;
+                console.error('Error checking transcript:', error);
+                document.getElementById('meetingStatus').textContent = `Error: ${error.message}`;
             }
         }
         
-        async function getNotionPageBlocks() {
-            const response = await fetch(`https://api.notion.com/v1/blocks/${notionPageId}/children`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${notionToken}`,
-                    'Notion-Version': '2022-06-28'
-                }
-            });
+        function processTranscript(transcript) {
+            const sentences = transcript.sentences || [];
+            document.getElementById('transcriptLength').textContent = sentences.length;
+            document.getElementById('meetingDuration').textContent = `${Math.round(transcript.duration / 60)}min`;
+            document.getElementById('meetingStatus').textContent = 'Active';
             
-            if (!response.ok) {
-                throw new Error(`Notion API error: ${response.statusText}`);
-            }
+            // Find new sentences since last check
+            const newSentences = sentences.slice(lastTranscriptId ? sentences.findIndex(s => s.start_time === lastTranscriptId) + 1 : 0);
             
-            const data = await response.json();
-            return data.results;
-        }
-        
-        function extractTextFromBlocks(blocks) {
-            let text = '';
-            for (const block of blocks) {
-                if (block.type === 'paragraph' && block.paragraph?.rich_text) {
-                    for (const richText of block.paragraph.rich_text) {
-                        text += richText.plain_text + ' ';
+            if (newSentences.length > 0) {
+                updateTranscriptDisplay(newSentences);
+                
+                // Check for questions if auto-detection is enabled
+                if (document.getElementById('autoQuestions').checked) {
+                    const questions = findQuestionsInSentences(newSentences);
+                    document.getElementById('questionsFound').textContent = processedQuestions.size;
+                    
+                    // Process new questions asynchronously
+                    for (const question of questions) {
+                        if (!processedQuestions.has(question.text)) {
+                            processedQuestions.add(question.text);
+                            processNewQuestion(question.text, question.speaker);
+                        }
                     }
-                    text += '\n';
-                } else if (block.type === 'bulleted_list_item' && block.bulleted_list_item?.rich_text) {
-                    for (const richText of block.bulleted_list_item.rich_text) {
-                        text += '• ' + richText.plain_text + ' ';
-                    }
-                    text += '\n';
+                }
+                
+                // Update last position
+                if (sentences.length > 0) {
+                    lastTranscriptId = sentences[sentences.length - 1].start_time;
                 }
             }
-            return text;
         }
         
-        function findQuestions(content) {
-            // Look for question patterns
-            const lines = content.split('\n');
-            const questions = [];
-            
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed.length > 10 && (
-                    trimmed.endsWith('?') || 
-                    trimmed.toLowerCase().includes('how') ||
-                    trimmed.toLowerCase().includes('what') ||
-                    trimmed.toLowerCase().includes('can you') ||
-                    trimmed.toLowerCase().includes('do you')
-                )) {
-                    questions.push(trimmed);
-                }
-            }
-            
-            return questions;
-        }
-        
-        async function processNewQuestion(question) {
-            // Add to transcript panel
-            addToTranscript(question);
-            
-            // Generate coaching response
-            if (claudeApiKey) {
-                await generateCoaching(question);
-            }
-        }
-        
-        function addToTranscript(text) {
+        function updateTranscriptDisplay(newSentences) {
             const transcriptContent = document.getElementById('transcriptContent');
             
             // Clear loading message if it exists
@@ -697,27 +779,65 @@
                 transcriptContent.innerHTML = '';
             }
             
-            const item = document.createElement('div');
-            item.className = 'transcript-item new';
-            item.innerHTML = `
-                <div class="transcript-time">${new Date().toLocaleTimeString()}</div>
-                <div class="transcript-text">${text}</div>
-            `;
+            for (const sentence of newSentences) {
+                const item = document.createElement('div');
+                const isQuestion = sentence.text.trim().endsWith('?');
+                
+                item.className = `transcript-item ${isQuestion ? 'question' : 'speaker'} new`;
+                item.innerHTML = `
+                    <div class="transcript-time">${formatTime(sentence.start_time)}</div>
+                    <div class="transcript-speaker">${sentence.speaker_name || 'Unknown'}</div>
+                    <div class="transcript-text">${sentence.text}</div>
+                `;
+                
+                transcriptContent.appendChild(item);
+            }
             
-            transcriptContent.appendChild(item);
             transcriptContent.scrollTop = transcriptContent.scrollHeight;
         }
         
-        async function generateCoaching(question) {
-            try {
-                const coaching = await callClaudeForCoaching(question);
-                addCoachingResponse(question, coaching);
-            } catch (error) {
-                console.error('Error generating coaching:', error);
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        function findQuestionsInSentences(sentences) {
+            const questions = [];
+            
+            for (const sentence of sentences) {
+                const text = sentence.text.trim();
+                if (text.length > 10 && (
+                    text.endsWith('?') ||
+                    text.toLowerCase().includes('how') ||
+                    text.toLowerCase().includes('what') ||
+                    text.toLowerCase().includes('can you') ||
+                    text.toLowerCase().includes('do you') ||
+                    text.toLowerCase().includes('could you')
+                )) {
+                    questions.push({
+                        text: text,
+                        speaker: sentence.speaker_name
+                    });
+                }
+            }
+            
+            return questions;
+        }
+        
+        async function processNewQuestion(question, speaker) {
+            // Generate coaching response if Claude is available
+            if (claudeApiKey) {
+                try {
+                    const coaching = await callClaudeForCoaching(question, speaker);
+                    addCoachingResponse(question, coaching, speaker);
+                } catch (error) {
+                    console.error('Error generating coaching:', error);
+                }
             }
         }
         
-        function addCoachingResponse(question, coaching) {
+        function addCoachingResponse(question, coaching, speaker) {
             const coachingContent = document.getElementById('coachingContent');
             
             // Clear placeholder if it exists
@@ -728,7 +848,7 @@
             const item = document.createElement('div');
             item.className = 'coaching-item';
             item.innerHTML = `
-                <div class="coaching-question">Q: ${question}</div>
+                <div class="coaching-question">Q from ${speaker}: ${question}</div>
                 ${coaching}
             `;
             
@@ -736,19 +856,20 @@
             coachingContent.scrollTop = coachingContent.scrollHeight;
         }
         
-        async function callClaudeForCoaching(question) {
+        async function callClaudeForCoaching(question, speaker) {
             const pmaKnowledge = {
                 pricing: "Business $47.94/month, Pro $129.94/month, Enterprise $398.25/month. 76% cheaper than Supermetrics.",
                 speed: "3x faster data loading via local warehousing vs API-dependent competitors",
                 reliability: "Data available even when third-party APIs are down via local warehousing",
                 support: "1:300 customer ratio vs competitors at 1:3000+. Human experts, not chatbots.",
                 integrations: "50+ connectors, BigQuery/MySQL/Azure exports, native Looker Studio",
-                differentiators: "Only platform with local data warehousing. Spark AI launching Q2 2025."
+                differentiators: "Only platform with local data warehousing. Spark AI launching Q2 2025.",
+                team: "17-person team, 10 years in business, bootstrap values vs VC-funded competitors"
             };
             
             const prompt = `You are providing LIVE sales coaching for a Power My Analytics sales call.
 
-PROSPECT QUESTION: "${question}"
+PROSPECT QUESTION: "${question}" (asked by ${speaker})
 
 PMA COMPETITIVE ADVANTAGES: ${JSON.stringify(pmaKnowledge)}
 
@@ -758,7 +879,7 @@ Provide exactly 3 coaching points for immediate response:
 💡 VALUE ADD: [Business benefit in 15 words or less] 
 ❓ FOLLOW-UP: [Smart question to maintain control in 15 words or less]
 
-Be conversational, confident, and focus on PMA's unique advantages.`;
+Be conversational, confident, and focus on PMA's unique advantages over competitors like Supermetrics.`;
 
             const response = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
@@ -788,7 +909,7 @@ Be conversational, confident, and focus on PMA's unique advantages.`;
         }
         
         function manualRefresh() {
-            checkForNewContent();
+            checkForNewTranscript();
         }
         
         function clearCoaching() {
@@ -797,7 +918,6 @@ Be conversational, confident, and focus on PMA's unique advantages.`;
                     <p>Coaching responses cleared. New questions will appear here.</p>
                 </div>
             `;
-            processedQuestions.clear();
         }
     </script>
 </body>
